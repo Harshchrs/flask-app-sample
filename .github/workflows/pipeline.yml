@@ -1,0 +1,81 @@
+name: TaskFlow CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Linter
+        run: |
+          ruff check .
+
+      - name: Run Unit Tests
+        run: |
+          pytest
+
+      - name: Build Release Package
+        run: |
+          zip -r release.zip . \
+            -x ".git/*" \
+               ".github/*" \
+               ".venv/*" \
+               "__pycache__/*" \
+               ".pytest_cache/*"
+
+      - name: Generate SHA256 Checksum
+        run: |
+          sha256sum release.zip > release.sha256
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-build
+          path: |
+            release.zip
+            release.sha256
+          retention-days: 7
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: taskflow-build
+          path: deployment
+
+      - name: Verify Artifact Integrity
+        run: |
+          cd deployment
+          sha256sum -c release.sha256
+
+      - name: Deploy to Production (Simulated)
+        run: |
+          mkdir deployed-app
+          unzip deployment/release.zip -d deployed-app
+          echo "Application deployed successfully."
+
+      - name: Smoke Test
+        run: |
+          test -f deployed-app/app.py
+          echo "Health Check Passed"
+
+      - name: Pipeline Summary
+        run: |
+          echo "TaskFlow built, packaged, verified and deployed successfully."
+
